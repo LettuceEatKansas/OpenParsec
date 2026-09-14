@@ -22,13 +22,28 @@ jobs:
       archive_path: ${{ env.archive_path }}
 
     steps:
-      - uses: maxim-lobanov/setup-xcode@v1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: "26.2"
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
         with:
           submodules: recursive
+      - name: Verify ParsecSDK blob (supply-chain gate)
+        env:
+          PARSEC_SDK_COMMIT: bb336699ee7acd7a4eb0c460410a65c23d7f3879
+          PARSEC_SDK_SHA256: 2ef504fa2aad5e23a615c5f0d2d440a3102fe5dd34b471c700e08acf492e4603
+        run: |
+          set -euo pipefail
+          blob="Frameworks/ParsecSDK.framework/ParsecSDK"
+          test -f "$blob" || { echo "::error::ParsecSDK binary missing"; exit 1; }
+          actual_commit="$(git -C Frameworks/ParsecSDK.framework rev-parse HEAD)"
+          if [ "$actual_commit" != "$PARSEC_SDK_COMMIT" ]; then
+            echo "::error::ParsecSDK submodule moved. expected $PARSEC_SDK_COMMIT got $actual_commit"
+            exit 1
+          fi
+          echo "$PARSEC_SDK_SHA256  $blob" | shasum -a 256 -c -
+          echo "ParsecSDK blob verified: $PARSEC_SDK_SHA256"
       - name: Set Scheme
         id: scheme
         run: |
@@ -61,7 +76,7 @@ jobs:
       - name: Tar Build Artifact
         run: tar -cvf "$archive_path.xcarchive.tar" "$archive_path.xcarchive"
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.archive_path }}.xcarchive.tar
           path: ${{ env.archive_path }}.xcarchive.tar
@@ -78,21 +93,25 @@ jobs:
 
     steps:
       - name: Download a Build Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ env.archive_path }}.xcarchive.tar
       - name: Extract Build Artifact
         run: tar -xf "$archive_path.xcarchive.tar"
-      - name: Install ldid
+      - name: Install ldid (pinned + checksum verified)
+        env:
+          LDID_VERSION: v2.1.5-procursus7
+          LDID_SHA256: 4b8862b2fefa2cd7fa8f88cb0310779619aeaa8c72d6aff22f019b470f2fa99a
         run: |
-          if [ `uname -s` = "Linux" ]; then
-            curl -sSL -o /usr/local/bin/ldid "${{ github.server_url }}/ProcursusTeam/ldid/releases/latest/download/ldid_linux_`uname -m`"
-            chmod +x /usr/local/bin/ldid
-          elif [ `uname -s` = "Darwin" ]; then
-            brew install ldid
-          else
+          set -euo pipefail
+          if [ "`uname -s`" != "Linux" ] || [ "`uname -m`" != "x86_64" ]; then
+            echo "::error::This job is pinned to ldid $LDID_VERSION for linux x86_64 only."
             exit 1
           fi
+          curl -fsSL -o /tmp/ldid \
+            "${{ github.server_url }}/ProcursusTeam/ldid/releases/download/$LDID_VERSION/ldid_linux_x86_64"
+          echo "$LDID_SHA256  /tmp/ldid" | sha256sum -c -
+          install -m 0755 /tmp/ldid /usr/local/bin/ldid
       - name: Fakesign
         run: |
           find "$archive_path.xcarchive/Products/Applications/$scheme.app" -type d -path '*/Frameworks/*.framework' -exec ldid -S \{\} \;
@@ -102,7 +121,7 @@ jobs:
           mv "$archive_path.xcarchive/Products/Applications" Payload
           zip -r "$scheme.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.scheme }}.ipa
           path: ${{ env.scheme }}.ipa
@@ -120,9 +139,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Download a Build Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.package.outputs.artifact }}
       - name: Update AltStore source
@@ -135,7 +154,7 @@ jobs:
         run: |
           python update_json.py
       - name: Nightly Release
-        uses: andelf/nightly-release@v1
+        uses: andelf/nightly-release@c5ed4bdb7c1da04a4fa1e40bc5e67306f682563b # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
