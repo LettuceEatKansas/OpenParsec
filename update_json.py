@@ -5,6 +5,11 @@ import requests
 import os
 from datetime import datetime
 
+# Derive the repo from CI so a fork publishes links to ITS OWN releases.
+# Hardcoding the upstream made a fork's AltStore source hand out the upstream
+# IPA instead of the artifact this workflow actually built and verified.
+REPO = os.environ.get("GITHUB_REPOSITORY", "hugeBlack/OpenParsec")
+
 def prepare_description(text):
     text = re.sub('<[^<]+?>', '', text) # Remove HTML tags
     text = re.sub(r'#{1,6}\s?', '', text) # Remove markdown header tags
@@ -109,11 +114,11 @@ def update_json_file_release(json_file, latest_release):
         "caption": f"Update of OpenParsec just got released!",
         "date": latest_release["published_at"],
         "identifier": news_identifier,
-        "imageURL": "https://raw.githubusercontent.com/hugeBlack/OpenParsec/main/screenshots/release.png",
+        "imageURL": f"https://raw.githubusercontent.com/{REPO}/main/screenshots/release.png",
         "notify": True,
         "tintColor": "#0784FC",
         "title": f"{full_version} - OpenParsec  {date_string}",
-        "url": f"https://github.com/hugeBlack/OpenParsec/releases/tag/{tag}"
+        "url": f"https://github.com/{REPO}/releases/tag/{tag}"
     }
 
     news_entry_exists = any(item["identifier"] == news_identifier for item in data["news"])
@@ -159,7 +164,7 @@ def update_json_file_nightly(json_file, nightly_release):
     commit_msg = os.environ.get("commit_msg", "").strip()
 
     description = f"""\
-Nightly build from [{commit_sha}](https://github.com/hugeBlack/OpenParsec/commit/{commit_sha}):\
+Nightly build from [{commit_sha}](https://github.com/{REPO}/commit/{commit_sha}):\
  {commit_msg}
 
 This is a nightly release [created automatically with GitHub Actions workflow]({nightly_link}).
@@ -214,7 +219,7 @@ This is a nightly release [created automatically with GitHub Actions workflow]({
 
 
 def main():
-    repo_url = "hugeBlack/OpenParsec"
+    repo_url = REPO
     is_nightly = "NIGHTLY_LINK" in os.environ
 
     try:
